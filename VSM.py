@@ -6,7 +6,7 @@ import numpy as np
 
 # Function to load and extract text from crawled HTML files
 def load_crawled_pages():
-    documents = []  # List to store all documents' text
+    documents = []  
     folder_path = 'crawled_pages'  # Folder where HTML files are saved
     
     # Loop through each file in the folder
