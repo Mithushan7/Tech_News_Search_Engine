@@ -7,7 +7,7 @@ import numpy as np
 # Function to load and extract text from crawled HTML files
 def load_crawled_pages():
     documents = []  
-    folder_path = 'crawled_pages'  # Folder where HTML files are saved
+    folder_path = 'crawled_pages'  
     
     # Loop through each file in the folder
     for filename in os.listdir(folder_path):
@@ -19,13 +19,13 @@ def load_crawled_pages():
                 html_content = file.read()
                 # Use BeautifulSoup to extract the text from the HTML
                 soup = BeautifulSoup(html_content, 'html.parser')
-                text = soup.get_text()  # Get the text without HTML tags
+                text = soup.get_text()  
                 
                 # Only append non-empty text to documents list
                 if text.strip():
                     documents.append(text)
     
-    return documents  # Return the list of documents
+    return documents  
 
 # Load the documents from the crawled HTML pages
 documents = load_crawled_pages()
@@ -47,8 +47,8 @@ else:
     terms = vectorizer.get_feature_names_out()
 
     # Step 5: Get user input for the query
-    query_input = input("Enter your search query: ").strip()  # Input from the user
-    query = [query_input]  # Create a list from the input
+    query_input = input("Enter your search query: ").strip()  
+    query = [query_input]  
 
     # Step 6: Transform the query into the same TF-IDF vector space
     query_vector = vectorizer.transform(query).toarray()
@@ -62,11 +62,11 @@ else:
 
     # Step 9: Rank the documents based on similarity
     # Sort the indexes of cosine similarity in descending order
-    ranking = np.argsort(-cosine_sim[0])  # Sort in descending order
+    ranking = np.argsort(-cosine_sim[0])  
     print("\nRanked Document Indexes (from most relevant to least relevant):", ranking)
 
     # Step 10: Display the most relevant document
-    most_relevant_idx = ranking[0]  # Get the index of the most relevant document
+    most_relevant_idx = ranking[0]  
     print("\nMost Relevant Document:")
     print(f"Document {most_relevant_idx}:")
-    print(documents[most_relevant_idx])  # Print the content of the most relevant document
+    print(documents[most_relevant_idx])  
