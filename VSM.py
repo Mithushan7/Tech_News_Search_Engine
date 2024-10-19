@@ -1,72 +1,104 @@
-from bs4 import BeautifulSoup
-import os
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
+import json
 import numpy as np
+from collections import defaultdict
+import string
 
-# Function to load and extract text from crawled HTML files
-def load_crawled_pages():
-    documents = []  
-    folder_path = 'crawled_pages'  
+# loading the inverted index from JSON
+def load_inverted_index(file_path='inverted_index.json'):
+    with open(file_path, 'r', encoding='utf-8') as file:
+        inverted_index = json.load(file)
+    return inverted_index
+
+# calculate TF-IDF scores
+def compute_tfidf(inverted_index, num_documents):
+    tfidf = defaultdict(dict)
     
-    # Loop through each file in the folder
-    for filename in os.listdir(folder_path):
-        # Only process files with .html extension
-        if filename.endswith('.html'):
-            file_path = os.path.join(folder_path, filename)
-            with open(file_path, 'r', encoding='utf-8') as file:
-                # Read the HTML content of the file
-                html_content = file.read()
-                # Use BeautifulSoup to extract the text from the HTML
-                soup = BeautifulSoup(html_content, 'html.parser')
-                text = soup.get_text()  
-                
-                # Only append non-empty text to documents list
-                if text.strip():
-                    documents.append(text)
+    # IDF for each term
+    idf = {}
+    for term, postings in inverted_index.items():
+        doc_frequency = len(postings)  # Number of documents containing the term
+        idf[term] = np.log(num_documents / (doc_frequency + 1))  # Smoothing
+
+    # TF-IDF for each document
+    for term, postings in inverted_index.items():
+        for doc_id in postings:
+            tf = postings[doc_id][0]  # Assuming tf is stored as the first element
+            tfidf[doc_id][term] = tf * idf[term]
     
-    return documents  
+    return tfidf, idf.keys()
 
-# Load the documents from the crawled HTML pages
-documents = load_crawled_pages()
+# create document vectors
+def create_document_vectors(tfidf, all_terms):
+    document_vectors = {}
+    term_list = list(all_terms)  
+    
+    for doc_id, terms in tfidf.items():
+        # Create a zero vector of length equal to the number of unique terms
+        vector = np.zeros(len(term_list))
+        for i, term in enumerate(term_list):
+            if term in terms:
+                vector[i] = terms[term]
+        document_vectors[doc_id] = vector
+    return document_vectors, term_list
 
-# Check if the documents list is empty
-if not documents:
-    print("No valid documents found.")
-else:
-    # Step 1: Initialize the TfidfVectorizer
-    vectorizer = TfidfVectorizer()
+# tokenize and preprocess the query
+def preprocess_query(query):
+    # Convert to lowercase and remove punctuation
+    query = query.lower().translate(str.maketrans('', '', string.punctuation))
+    return query.split()
 
-    # Step 2: Fit and transform the documents to generate the TF-IDF matrix
-    tfidf_matrix = vectorizer.fit_transform(documents)
+# process query and compute its TF-IDF vector
+def compute_query_vector(query, inverted_index, idf, all_terms):
+    query_terms = preprocess_query(query)
+    query_vector = np.zeros(len(all_terms))
+    
+    term_list = list(all_terms)
+    
+    for term in query_terms:
+        if term in inverted_index:
+            term_index = term_list.index(term)
+            query_vector[term_index] = 1 * idf[term]  # Simple binary TF
+    return query_vector
 
-    # Step 3: Convert the sparse matrix to an array (dense matrix)
-    tfidf_array = tfidf_matrix.toarray()
+# compute cosine similarity
+def compute_cosine_similarity(vec1, vec2):
+    dot_product = np.dot(vec1, vec2)
+    norm_a = np.linalg.norm(vec1)
+    norm_b = np.linalg.norm(vec2)
+    return dot_product / (norm_a * norm_b) if norm_a and norm_b else 0.0
 
-    # Step 4: Get the terms (features) from the vectorizer
-    terms = vectorizer.get_feature_names_out()
+# rank documents based on query(top 10 docs)
+def rank_documents(query_vector, document_vectors):
+    scores = {}
+    for doc_id, doc_vector in document_vectors.items():
+        scores[doc_id] = compute_cosine_similarity(query_vector, doc_vector)
+    return sorted(scores.items(), key=lambda item: item[1], reverse=True)[:10]
 
-    # Step 5: Get user input for the query
-    query_input = input("Enter your search query: ").strip()  
-    query = [query_input]  
+# Main function
+if __name__ == "__main__":
+    # Load the inverted index from JSON
+    inverted_index = load_inverted_index()
+    num_documents = len(set(doc for docs in inverted_index.values() for doc in docs))  
 
-    # Step 6: Transform the query into the same TF-IDF vector space
-    query_vector = vectorizer.transform(query).toarray()
+    # TF-IDF for documents
+    tfidf, all_terms = compute_tfidf(inverted_index, num_documents)
 
-    # Step 7: Compute cosine similarity between the query and all document vectors
-    cosine_sim = cosine_similarity(query_vector, tfidf_array)
+    # document vectors
+    document_vectors, term_list = create_document_vectors(tfidf, all_terms)
 
-    # Step 8: Print the similarity scores for each document
-    print("Cosine Similarity Scores:")
-    print(cosine_sim)
+    # Get user query
+    query = input("Enter your search query: ")
 
-    # Step 9: Rank the documents based on similarity
-    # Sort the indexes of cosine similarity in descending order
-    ranking = np.argsort(-cosine_sim[0])  
-    print("\nRanked Document Indexes (from most relevant to least relevant):", ranking)
+    # IDF for the query
+    idf = {term: np.log(num_documents / (len(inverted_index[term]) + 1)) for term in inverted_index}
 
-    # Step 10: Display the most relevant document
-    most_relevant_idx = ranking[0]  
-    print("\nMost Relevant Document:")
-    print(f"Document {most_relevant_idx}:")
-    print(documents[most_relevant_idx])  
+    # query vector
+    query_vector = compute_query_vector(query, inverted_index, idf, term_list)
+
+    # Rank documents based on the query vector
+    ranked_documents = rank_documents(query_vector, document_vectors)
+
+    # Display ranked documents
+    print("Top 10 ranked documents:")
+    for doc_id, score in ranked_documents:
+        print(f"{doc_id}: {score:.4f}")
