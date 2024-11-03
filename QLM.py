@@ -1,90 +1,103 @@
-import numpy as np
+import os
+import math
 from collections import defaultdict
-import string
-import json
 
-# Preprocess query: convert to lowercase, remove punctuation, and split into words
+def load_documents(directory):
+    """
+    Load documents from the specified directory.
+    Returns a dictionary where keys are filenames and values are document contents.
+    """
+    documents = {}
+    for filename in os.listdir(directory):
+        if filename.endswith('.txt'):
+            with open(os.path.join(directory, filename), 'r', encoding='utf-8') as file:
+                documents[filename] = file.read()
+    return documents
+
 def preprocess_query(query):
-    query = query.lower().translate(str.maketrans('', '', string.punctuation))
-    return query.split()
+    """
+    Preprocess the query by converting it to lowercase and splitting into words.
+    """
+    return query.lower().split()
 
-# Build a basic language model for each document
-def build_language_model(inverted_index, total_terms_collection):
-    language_models = {}
-    
-    # Calculate total term frequency in each document
-    doc_lengths = defaultdict(int)
-    
-    for term, postings in inverted_index.items():
-        for doc_id, posting in postings.items():
-            tf = posting[0]
-            doc_lengths[doc_id] += tf  
-    
-    # Create a probability model for each document
-    for term, postings in inverted_index.items():
-        for doc_id, posting in postings.items():
-            tf = posting[0]  
-            if doc_id not in language_models:
-                language_models[doc_id] = {}
-            # Probability of term in document
-            language_models[doc_id][term] = tf / doc_lengths[doc_id]
-    
-    return language_models, doc_lengths
+def calculate_document_lengths(documents):
+    """
+    Calculate the length of each document (number of words).
+    Returns a dictionary of document lengths.
+    """
+    doc_lengths = {filename: len(content.split()) for filename, content in documents.items()}
+    return doc_lengths
 
-#query likelihood (Dirichlet smoothing)
-def dirichlet_smoothing(query_terms, language_models, doc_lengths, total_terms_collection, inverted_index, mu=2000):
-    query_likelihoods = {}
+def build_word_frequency(documents):
+    """
+    Build word frequency for each document.
+    Returns a dictionary where keys are document filenames and values are word frequency dictionaries.
+    """
+    word_freqs = {}
+    for filename, content in documents.items():
+        words = content.lower().split()
+        freq = defaultdict(int)
+        for word in words:
+            freq[word] += 1
+        word_freqs[filename] = freq
+    return word_freqs
+
+def calculate_qlm_score(query, doc_word_freq, doc_length, total_docs, mu):
+    """
+    Calculate the Query Likelihood Model score for a document based on the query.
+    """
+    score = 0.0
+    total_word_count = sum(doc_word_freq.values())
     
-    for doc_id, model in language_models.items():
-        likelihood = 1.0  
-        for term in query_terms:
-            doc_term_freq = model.get(term, 0) * doc_lengths[doc_id]  
-            collection_term_freq = sum(posting[0] for posting in inverted_index.get(term, {}).values())
-            
-            # Dirichlet smoothing formula
-            term_prob = (doc_term_freq + (mu * (collection_term_freq / total_terms_collection))) / (doc_lengths[doc_id] + mu)
-            
-            # Multiply the term probability to the likelihood
-            likelihood *= term_prob
-        
-        # Store the final likelihood for the document
-        query_likelihoods[doc_id] = likelihood
+    # For each word in the query
+    for word in query:
+        word_freq = doc_word_freq.get(word, 0)
+        prob_word_given_doc = (word_freq + mu * (1 / (total_word_count + mu))) / (doc_length + mu)
+        score += math.log(prob_word_given_doc)
     
-    return query_likelihoods
+    return score
 
-# Rank documents based on query likelihood scores
-def rank_documents_by_query_likelihood(query_likelihoods):
-    #sort by likelihood score (top 10)
-    return sorted(query_likelihoods.items(), key=lambda x: x[1], reverse=True)[:10]
+def rank_documents(query, documents, doc_lengths, word_freqs, mu=2000):
+    """
+    Rank documents based on the QLM score for the given query.
+    Returns a list of tuples (filename, score) sorted by score.
+    """
+    ranked_docs = []
+    for filename in documents.keys():
+        doc_length = doc_lengths[filename]
+        score = calculate_qlm_score(query, word_freqs[filename], doc_length, len(documents), mu)
+        ranked_docs.append((filename, score))
+    
+    # Sort by score in descending order
+    ranked_docs.sort(key=lambda x: x[1], reverse=True)
 
-#loading the inverted index from json
-def load_inverted_index(file_path='D:/IR/web crawling/IRA_search_engine/inverted_index.json'):
-    with open(file_path, 'r', encoding='utf-8') as file:
-        inverted_index = json.load(file)
-    return inverted_index
+    # Normalize scores to be positive
+    min_score = ranked_docs[-1][1]  # Get the least negative score
+    normalized_docs = [(filename, score - min_score) for filename, score in ranked_docs]
+    
+    return normalized_docs
 
-# Main function to handle the process
+
+def main(input_directory, query, mu=2000):
+    # Load documents
+    documents = load_documents(input_directory)
+    
+    # Preprocess the query
+    processed_query = preprocess_query(query)
+
+    # Calculate document lengths and word frequencies
+    doc_lengths = calculate_document_lengths(documents)
+    word_freqs = build_word_frequency(documents)
+
+    # Rank documents based on the query
+    ranked_docs = rank_documents(processed_query, documents, doc_lengths, word_freqs, mu)
+
+    # Print the top results
+    print("Top relevant documents:")
+    for filename, score in ranked_docs[:5]:  # Adjust the slice for more results
+        print(f"{filename}: Score = {score:.6f}")
+
 if __name__ == "__main__":
-    # Load the inverted index
-    inverted_index = load_inverted_index()
-    total_terms_collection = sum(len(posting) for term, posting in inverted_index.items()) 
-
-    # Build a simple language model for documents
-    language_models, doc_lengths = build_language_model(inverted_index, total_terms_collection)
-
-    # Get a search query from the user
-    query = input("Enter your search query: ")
-    query_terms = preprocess_query(query)
-
-    # Calculate likelihoods using Dirichlet smoothing
-    mu = 5000  
-    query_likelihoods = dirichlet_smoothing(query_terms, language_models, doc_lengths, total_terms_collection, inverted_index, mu)
-
-    # Rank documents by query likelihood
-    ranked_documents = rank_documents_by_query_likelihood(query_likelihoods)
-
-    #top 10 ranked documents
-    print("Top 10 ranked documents:")
-    for doc_id, score in ranked_documents:
-        print(f"Document ID: {doc_id}, Likelihood: {score:.6f}")
-
+    input_directory = "filtered_texts"  # Directory with filtered text files
+    query = "Google Pixel 9 Pro"  # Replace with your actual query
+    main(input_directory, query)
