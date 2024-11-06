@@ -292,6 +292,8 @@ language_models, doc_lengths = document_language_model(inverted_index, total_ter
 
 
 
+
+
 # Initialize the dash app
 app = Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 
@@ -311,7 +313,7 @@ app.layout = dbc.Container([
     ], id="tabs", active_tab="vsm", className="justify-content-center"),
     
     dbc.Row([dbc.Col(html.Div(id='search-results', className='mt-4'))], justify='center')
-], fluid=True, style={'backgroundColor': '#f0f8ff', 'height': '100vh'})
+], fluid=True, style={'backgroundColor': '#e2e6f9 ', 'height': '100vh'})
 
 #decorator callback
 # Callback to handle search and display results for both VSM and QLM
@@ -328,12 +330,12 @@ def update_output(n_clicks, active_tab, query):
         tf_doc, idf = doc_log_tf(inverted_index, num_documents)
         query_vector = compute_query_vector(query, idf, term_list)
         ranked_documents = cosine_similarity_ranking(query_vector, document_vectors)
-        title = "VSM Top 10 Results:"
+        title = "Vector space model - Top 10 Results:"
     else:
         query_terms = preprocess_query(query)
         query_likelihoods = linear_interpolation_JM_smoothing(query_terms, language_models, doc_lengths, total_terms_collection, inverted_index, lambda_param=0.7)
         ranked_documents = QLM_ranking(query_likelihoods)
-        title = "QLM Top 10 Results:"
+        title = "Query likelihood model - Top 10 Results:"
 
     result_output = [html.H4(title)]
     for doc_id, score in ranked_documents:
