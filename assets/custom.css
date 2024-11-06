@@ -1,0 +1,33 @@
+/* custom.css */
+
+
+.nav-tabs .nav-link {
+    color: rgb(12, 12, 12) ; /* Set the text color for unselected tabs */
+    font-size: 18px; /* Set the font size for unselected tabs */
+    padding: 10px; /* Set padding */
+    width: 45vw;
+    display: block;
+    align-items: center;
+    text-align: center;
+    border: 1px solid black; /* Set border color to black and thickness to 3px */
+    border-radius: 2px; /* Optional: add rounded corners to the border */
+}
+
+.nav-tabs .nav-link.active {
+    background-color: #555252 !important; /* Bootstrap primary color for selected tab */
+    color: white !important; /* Text color for the active tab */
+    font-size: 18px; /* Increased font size for selected tab */
+    padding: 10px; /* Padding for active tab */
+    width: 45vw;
+    display: block;
+    align-items: center;
+    text-align: center;
+    border: 1px solid rgb(68, 65, 65); /* Keep the same border style for the active tab */
+}
+
+
+/* custom.css */
+.justify-content-center .nav-tabs {
+    justify-content: center;
+}
+
